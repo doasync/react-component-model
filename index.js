@@ -72,7 +72,11 @@ function providerFactory(Context, modelFactory, options) {
       ? undefined
       : modelFactory(optionsFromProp || options);
 
-    return <Context.Provider value={contextValue}>{children}</Context.Provider>;
+    return React.createElement(
+      Context.Provider,
+      { value: contextValue },
+      children,
+    );
   };
 
   bindData(Provider, {
@@ -105,9 +109,9 @@ export function Consumer(props) {
 
   const { ComponentContext } = getBoundData(Component);
 
-  return (
-    <ComponentContext.Consumer>
-      {model => children(model)}
-    </ComponentContext.Consumer>
+  return React.createElement(
+    ComponentContext.Consumer,
+    null,
+    model => children(model),
   );
 }
