@@ -49,5 +49,6 @@ module.exports = {
       'WithStatement',
       "BinaryExpression[operator='in']",
     ],
+    'spaced-comment': ['error', 'always', { markers: [':', '::'] }],
   },
 };
