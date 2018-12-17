@@ -1,126 +1,58 @@
 // @flow
 
-import * as React from 'react';
-import PropTypes from 'prop-types';
-import invariant from 'invariant';
+import React, { useContext, useMemo } from "react";
+import invariant from "invariant";
 
-const { useContext, useMemo } = React;
+const componentDataMap = new WeakMap();
 
-/*::
-type ModelData = {}
-type ModelOptions = {}
-type ModelFactory = (options: ?ModelOptions) => ModelData
-type ContextValue = {}
-type ComponentData = {
-  ComponentContext: React.Context<?ContextValue>,
-  modelFactory: ModelFactory
-}
-type ComponentType = React.ComponentType<{}>
-type BoundProvider = React.ComponentType<{
-  children: React.Node,
-  disable?: boolean,
-  options?: ModelOptions
-}>
-type BoundComponent = ComponentType | BoundProvider
-// $FlowIgnore
-type DataMap = WeakMap<BoundComponent, ComponentData>
-type ConsumerProps = {
-  children: (value: ?ContextValue) => ?React.Node,
-  of: BoundComponent,
-}
-*/
-
-const componentDataMap /*: DataMap */ = new WeakMap();
-
-function getDisplayName (Component /*: BoundComponent */) /*: string */ {
-  // flowlint-next-line sketchy-null-string: off
-  return Component.displayName || Component.name || 'Component';
+function getDisplayName(Component) {
+  return Component.displayName || Component.name || "Component";
 }
 
-function bindData (
-  Component /*: ComponentType */,
-  data /*: ComponentData */,
-) /*: void */ {
+function bindData(Component, data) {
   componentDataMap.set(Component, data);
 }
 
-export function getBoundData (Component /*: BoundComponent */) /*: ComponentData */ {
+export function getBoundData(Component) {
   const componentData = componentDataMap.get(Component);
 
-  invariant(componentData, `You need to bind a model to your component "${getDisplayName(Component)}" using bindModel`);
+  invariant(
+    componentData,
+    `You need to bind a model to your component "${getDisplayName(
+      Component
+    )}" (using bindModel)`
+  );
 
   return componentData;
 }
 
-function providerFactory (
-  Context /*: React.Context<?ContextValue> */,
-  modelFactory /*: ModelFactory */,
-  options /*: ?ModelOptions */,
-) /*: BoundProvider */ {
-  const Provider = ({
-    children,
-    disable,
-    options: optionsFromProp,
-  }) => {
-    const contextValue = disable
-      ? undefined
-      : modelFactory(optionsFromProp || options);
-
-    return React.createElement(Context.Provider, { value: contextValue }, children);
-  };
-
-  bindData(Provider, {
-    modelFactory,
-    ComponentContext: Context,
-  });
-
-  Provider.propTypes = {
-    disable: PropTypes.bool,
-    options: PropTypes.shape({}),
-    children: PropTypes.node.isRequired,
-  };
-
-  Provider.defaultProps = {
-    disable: false,
-    options: undefined,
-  };
-
-  return Provider;
-}
-
-export function bindModel (
-  Component /*: ComponentType */,
-  modelFactory /*: ModelFactory */,
-  ComponentContext /*: React.Context<?ContextValue> */ = React.createContext(),
-) /*: void */ {
+export function bindModel(
+  Component,
+  modelFactory,
+  ComponentContext = React.createContext()
+) {
   invariant(
-    typeof Component === 'function'
-    && typeof modelFactory === 'function'
-    && ComponentContext
-    && ComponentContext.Provider
-    && ComponentContext.Consumer,
-    'bindModel expects a component and a model factory (and optionally a context)',
+    typeof Component === "function" &&
+    typeof modelFactory === "function" &&
+    ComponentContext &&
+    ComponentContext.Provider &&
+    ComponentContext.Consumer,
+    `bindModel expects a component and a model factory (optionally a context)`
   );
 
   bindData(Component, {
     modelFactory,
-    ComponentContext,
+    ComponentContext
   });
 
-  // eslint-disable-next-line no-param-reassign
   Component.Consumer = ComponentContext.Consumer;
-  // eslint-disable-next-line no-param-reassign
   Component.Provider = providerFactory(ComponentContext, modelFactory);
 }
 
-
-export function useComponentModel (
-  Component /*: BoundComponent */,
-  Provider /*: ?BoundProvider */,
-) /*: ModelData */ {
+export function useComponentModel(Component, Provider) {
   invariant(
-    typeof Component === 'function',
-    'useComponentModel expects a component',
+    typeof Component === "function",
+    "useComponentModel expects a component"
   );
 
   const { modelFactory, ComponentContext } = getBoundData(Component);
@@ -134,13 +66,27 @@ export function useComponentModel (
   );
 }
 
-export function createComponentProvider (
-  Component /*: BoundComponent */,
-  options /*: ?ModelOptions */,
-) /*: BoundProvider */ {
+function providerFactory(Context, modelFactory, options) {
+  const Provider = ({ children, disable, options: optionsFromProp }) => {
+    const contextValue = disable
+      ? undefined
+      : modelFactory(optionsFromProp || options);
+
+    return <Context.Provider value={contextValue}>{children}</Context.Provider>;
+  };
+
+  bindData(Provider, {
+    modelFactory,
+    ComponentContext: Context
+  });
+
+  return Provider;
+}
+
+export function createComponentProvider(Component, options) {
   invariant(
-    typeof Component === 'function',
-    'createComponentProvider expects a component',
+    typeof Component === "function",
+    "createComponentProvider expects a component"
   );
 
   const { modelFactory } = getBoundData(Component);
@@ -149,24 +95,19 @@ export function createComponentProvider (
   return providerFactory(Context, modelFactory, options);
 }
 
-export function Consumer (props /*: ConsumerProps */) {
+export function Consumer(props) {
   const { children, of: Component } = props;
 
   invariant(
-    typeof children === 'function',
-    'Consumer expects a single child that is a function',
+    typeof children === "function",
+    "Consumer expects a single child that is a function"
   );
 
   const { ComponentContext } = getBoundData(Component);
 
-  return React.createElement(
-    ComponentContext.Consumer,
-    null,
-    model => children(model),
+  return (
+    <ComponentContext.Consumer>
+      {model => children(model)}
+    </ComponentContext.Consumer>
   );
 }
-
-Consumer.propTypes = {
-  of: PropTypes.func.isRequired,
-  children: PropTypes.func.isRequired,
-};
