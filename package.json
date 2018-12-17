@@ -2,7 +2,7 @@
   "name": "react-component-model",
   "version": "1.0.1",
   "description": "Component model pattern",
-  "main": "index.js",
+  "module": "index.js",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/doasync/react-component-model.git"

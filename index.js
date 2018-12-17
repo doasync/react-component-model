@@ -1,8 +1,8 @@
 // @flow
 
-const React = require('react');
-const PropTypes = require('prop-types');
-const invariant = require('invariant');
+import * as React from 'react';
+import PropTypes from 'prop-types';
+import invariant from 'invariant';
 
 const { useContext, useMemo } = React;
 
@@ -44,7 +44,7 @@ function bindData (
   componentDataMap.set(Component, data);
 }
 
-function getBoundData (Component /*: BoundComponent */) /*: ComponentData */ {
+export function getBoundData (Component /*: BoundComponent */) /*: ComponentData */ {
   const componentData = componentDataMap.get(Component);
 
   invariant(componentData, `You need to bind a model to your component "${getDisplayName(Component)}" using bindModel`);
@@ -88,7 +88,7 @@ function providerFactory (
   return Provider;
 }
 
-function bindModel (
+export function bindModel (
   Component /*: ComponentType */,
   modelFactory /*: ModelFactory */,
   ComponentContext /*: React.Context<?ContextValue> */ = React.createContext(),
@@ -99,7 +99,7 @@ function bindModel (
     && ComponentContext
     && ComponentContext.Provider
     && ComponentContext.Consumer,
-    'bindModel expects a component and a model factory (optionally a context)',
+    'bindModel expects a component and a model factory (and optionally a context)',
   );
 
   bindData(Component, {
@@ -113,7 +113,8 @@ function bindModel (
   Component.Provider = providerFactory(ComponentContext, modelFactory);
 }
 
-function useComponentModel (
+
+export function useComponentModel (
   Component /*: BoundComponent */,
   Provider /*: ?BoundProvider */,
 ) /*: ModelData */ {
@@ -133,7 +134,7 @@ function useComponentModel (
   );
 }
 
-function createComponentProvider (
+export function createComponentProvider (
   Component /*: BoundComponent */,
   options /*: ?ModelOptions */,
 ) /*: BoundProvider */ {
@@ -148,7 +149,7 @@ function createComponentProvider (
   return providerFactory(Context, modelFactory, options);
 }
 
-function Consumer (props /*: ConsumerProps */) {
+export function Consumer (props /*: ConsumerProps */) {
   const { children, of: Component } = props;
 
   invariant(
@@ -168,12 +169,4 @@ function Consumer (props /*: ConsumerProps */) {
 Consumer.propTypes = {
   of: PropTypes.func.isRequired,
   children: PropTypes.func.isRequired,
-};
-
-module.exports = {
-  bindModel,
-  getBoundData,
-  useComponentModel,
-  createComponentProvider,
-  Consumer,
 };
