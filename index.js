@@ -179,4 +179,5 @@ module.exports = {
   useComponentModel,
   createComponentProvider,
   Consumer,
+  React,
 };
