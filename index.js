@@ -1,8 +1,11 @@
 // @flow
+/* eslint-disable strict */
 
-const React = require('react');
+'use strict';
+
 const PropTypes = require('prop-types');
 const invariant = require('invariant');
+const React = require('./react');
 
 const { useContext, useMemo } = React;
 
