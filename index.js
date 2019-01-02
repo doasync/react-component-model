@@ -126,7 +126,7 @@ function createCustomComponent (
   const { ComponentContext, modelFactory } = getComponentData(Component);
   const CustomContext = React.createContext();
 
-  class CustomComponent extends React.Component<{}> {
+  class CustomComponent extends React.Component /*:: <{}> */ {
     static contextType = CustomContext;
 
     static Provider;
