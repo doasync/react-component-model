@@ -7,44 +7,42 @@ const invariant = require('invariant');
 const { useContext, useMemo } = React;
 
 /*::
-type ModelData = {}
+type Model = {}
 type ModelOptions = {}
-type ModelFactory = (options: ?ModelOptions) => ModelData
-type ContextValue = {}
+type ModelFactory = (options: ?ModelOptions) => Model
+type ComponentContext = React.Context<?Model>
 type ComponentData = {
-  ComponentContext: React.Context<?ContextValue>,
+  ComponentContext: ComponentContext,
   modelFactory: ModelFactory
 }
 type ComponentType = React.ComponentType<{}>
-type BoundProvider = React.ComponentType<{
+type ComponentProvider = React.ComponentType<{
   children: React.Node,
-  disable?: boolean,
+  modelRef?: (Model) => void,
   options?: ModelOptions
 }>
-type BoundComponent = ComponentType | BoundProvider
-// $FlowIgnore
-type DataMap = WeakMap<BoundComponent, ComponentData>
-type ConsumerProps = {
-  children: (value: ?ContextValue) => ?React.Node,
-  of: BoundComponent,
-}
+type BoundComponent = ComponentType
+// $FlowFixMe
+type ComponentDataMap = WeakMap<BoundComponent, ComponentData>
 */
 
-const componentDataMap /*: DataMap */ = new WeakMap();
+const componentDataMap /*: ComponentDataMap */ = new WeakMap();
+const modelRefSet = new WeakSet();
 
-function getDisplayName (Component /*: BoundComponent */) /*: string */ {
+function getDisplayName (Component /*: ComponentType */) /*: string */ {
   // flowlint-next-line sketchy-null-string: off
   return Component.displayName || Component.name || 'Component';
 }
 
-function bindData (
+function bindComponentData (
   Component /*: ComponentType */,
-  data /*: ComponentData */,
+  modelFactory /*: ModelFactory */,
+  ComponentContext /*: ComponentContext */,
 ) /*: void */ {
-  componentDataMap.set(Component, data);
+  componentDataMap.set(Component, { modelFactory, ComponentContext });
 }
 
-function getBoundData (Component /*: BoundComponent */) /*: ComponentData */ {
+function getComponentData (Component /*: BoundComponent */) /*: ComponentData */ {
   const componentData = componentDataMap.get(Component);
 
   invariant(componentData, `You need to bind a model to your component "${getDisplayName(Component)}" using bindModel`);
@@ -53,35 +51,32 @@ function getBoundData (Component /*: BoundComponent */) /*: ComponentData */ {
 }
 
 function providerFactory (
-  Context /*: React.Context<?ContextValue> */,
+  ComponentContext /*: ComponentContext */,
   modelFactory /*: ModelFactory */,
   options /*: ?ModelOptions */,
-) /*: BoundProvider */ {
-  const Provider = ({
-    children,
-    disable,
-    options: optionsFromProp,
-  }) => {
-    const contextValue = disable
-      ? undefined
-      : modelFactory(optionsFromProp || options);
+) /*: ComponentProvider */ {
+  const Provider = ({ children, modelRef, options: optionsFromProp }) => {
+    const model = modelFactory(optionsFromProp || options);
 
-    return React.createElement(Context.Provider, { value: contextValue }, children);
+    if (typeof modelRef === 'function') {
+      invariant(!modelRefSet.has(modelRef), `You cannot pass single ref to multiple "${getDisplayName(Provider)}" providers`);
+
+      modelRef(model);
+
+      modelRefSet.add(modelRef);
+    }
+
+    return React.createElement(ComponentContext.Provider, { value: model }, children);
   };
 
-  bindData(Provider, {
-    modelFactory,
-    ComponentContext: Context,
-  });
-
   Provider.propTypes = {
-    disable: PropTypes.bool,
-    options: PropTypes.shape({}),
+    modelRef: PropTypes.func,
+    options: PropTypes.objectOf(PropTypes.any),
     children: PropTypes.node.isRequired,
   };
 
   Provider.defaultProps = {
-    disable: false,
+    modelRef: undefined,
     options: undefined,
   };
 
@@ -91,21 +86,15 @@ function providerFactory (
 function bindModel (
   Component /*: ComponentType */,
   modelFactory /*: ModelFactory */,
-  ComponentContext /*: React.Context<?ContextValue> */ = React.createContext(),
 ) /*: void */ {
   invariant(
-    typeof Component === 'function'
-    && typeof modelFactory === 'function'
-    && ComponentContext
-    && ComponentContext.Provider
-    && ComponentContext.Consumer,
-    'bindModel expects a component and a model factory (optionally a context)',
+    typeof Component === 'function' && typeof modelFactory === 'function',
+    'bindModel expects a component and a model factory (and optionally a context)',
   );
 
-  bindData(Component, {
-    modelFactory,
-    ComponentContext,
-  });
+  const ComponentContext = React.createContext();
+
+  bindComponentData(Component, modelFactory, ComponentContext);
 
   // eslint-disable-next-line no-param-reassign
   Component.Consumer = ComponentContext.Consumer;
@@ -113,67 +102,61 @@ function bindModel (
   Component.Provider = providerFactory(ComponentContext, modelFactory);
 }
 
-function useComponentModel (
-  Component /*: BoundComponent */,
-  Provider /*: ?BoundProvider */,
-) /*: ModelData */ {
-  invariant(
-    typeof Component === 'function',
-    'useComponentModel expects a component',
+function useModel (Component /*: BoundComponent */) /*: Model */ {
+  invariant(typeof Component === 'function', 'useModel expects a component');
+
+  const { ComponentContext, modelFactory } = useMemo(
+    () => getComponentData(Component), [],
   );
 
-  const { modelFactory, ComponentContext } = getBoundData(Component);
-  const { ComponentContext: ProviderContext } = Provider
-    ? getBoundData(Provider)
-    : {};
+  const defaultModel = useMemo(modelFactory, []);
 
-  return (
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useContext(ProviderContext || ComponentContext) || useMemo(modelFactory)
-  );
+  return useContext(ComponentContext) || defaultModel;
 }
 
-function createComponentProvider (
+function createCustomComponent (
   Component /*: BoundComponent */,
   options /*: ?ModelOptions */,
-) /*: BoundProvider */ {
+) /*: BoundComponent */ {
   invariant(
     typeof Component === 'function',
-    'createComponentProvider expects a component',
+    'createCustomComponent expects a base component',
   );
 
-  const { modelFactory } = getBoundData(Component);
-  const Context = React.createContext();
+  const { ComponentContext, modelFactory } = getComponentData(Component);
+  const CustomContext = React.createContext();
 
-  return providerFactory(Context, modelFactory, options);
+  class CustomComponent extends React.Component<{}> {
+    static contextType = CustomContext;
+
+    static Provider;
+
+    static Consumer;
+
+    render () {
+      return (
+        <ComponentContext.Provider value={this.context}>
+          <Component {...this.props} />
+        </ComponentContext.Provider>
+      );
+    }
+  }
+
+  bindComponentData(CustomComponent, modelFactory, CustomContext);
+
+  CustomComponent.Provider = providerFactory(
+    CustomContext,
+    modelFactory,
+    options,
+  );
+
+  CustomComponent.Consumer = CustomContext.Consumer;
+
+  return CustomComponent;
 }
-
-function Consumer (props /*: ConsumerProps */) {
-  const { children, of: Component } = props;
-
-  invariant(
-    typeof children === 'function',
-    'Consumer expects a single child that is a function',
-  );
-
-  const { ComponentContext } = getBoundData(Component);
-
-  return React.createElement(
-    ComponentContext.Consumer,
-    null,
-    model => children(model),
-  );
-}
-
-Consumer.propTypes = {
-  of: PropTypes.func.isRequired,
-  children: PropTypes.func.isRequired,
-};
 
 module.exports = {
   bindModel,
-  getBoundData,
-  useComponentModel,
-  createComponentProvider,
-  Consumer,
+  useModel,
+  createCustomComponent,
 };
