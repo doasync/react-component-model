@@ -26,7 +26,7 @@ npm i react-component-model
 Usage
 -----
 
-https://codesandbox.io/s/qvroxnlwjq
+https://codesandbox.io/s/znn3958r44
 
 Author
 ------
