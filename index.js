@@ -29,7 +29,7 @@ type ClassInstance = { context: Model, constructor: any }
 */
 
 const componentDataMap /*: ComponentDataMap */ = new WeakMap();
-const modelRefSet = new Set();
+const modelRefSet = new WeakSet();
 
 function getDisplayName (Component /*: ComponentType */) /*: string */ {
   // flowlint-next-line sketchy-null-string: off
