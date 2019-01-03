@@ -29,7 +29,8 @@
     "invariant": "^2.2.4",
     "prop-types": "^15.6.2",
     "react": "16.7.0-alpha.2",
-    "react-dom": "16.7.0-alpha.2"
+    "react-dom": "16.7.0-alpha.2",
+    "warning": "^4.0.2"
   },
   "devDependencies": {
     "babel-eslint": "^9.0.0",

@@ -3,6 +3,7 @@
 const React = require('react');
 const PropTypes = require('prop-types');
 const invariant = require('invariant');
+const warning = require('warning');
 
 const { useContext, useMemo } = React;
 
@@ -28,7 +29,7 @@ type ClassInstance = { context: Model, constructor: any }
 */
 
 const componentDataMap /*: ComponentDataMap */ = new WeakMap();
-const modelRefSet = new WeakSet();
+const modelRefSet = new Set();
 
 function getDisplayName (Component /*: ComponentType */) /*: string */ {
   // flowlint-next-line sketchy-null-string: off
@@ -67,11 +68,11 @@ function providerFactory (
     const model = modelFactory(optionsFromProp || options);
 
     if (typeof modelRef === 'function') {
-      invariant(
+      warning(
         !modelRefSet.has(modelRef),
-        `You cannot pass single ref to multiple "${getDisplayName(
+        `You should not pass single modelRef function to multiple providers (${getDisplayName(
           Provider,
-        )}" providers`,
+        )})`,
       );
 
       modelRef(model);
@@ -123,6 +124,7 @@ function bindModel (
   }
   Component.Consumer = ComponentContext.Consumer;
   Component.Provider = providerFactory(ComponentContext, modelFactory, options);
+  Component.Provider.displayName = `${getDisplayName(Component)}.Provider`;
   /* eslint-enable no-param-reassign */
 
   return ComponentContext;
@@ -180,6 +182,8 @@ function createCustomComponent (
       );
     }
   }
+
+  CustomComponent.displayName = `Custom$${getDisplayName(Component)}`;
 
   bindModel(CustomComponent, modelFactory, CustomContext, options);
 
