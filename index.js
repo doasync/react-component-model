@@ -24,6 +24,7 @@ type ComponentProvider = React.ComponentType<{
 type BoundComponent = ComponentType
 // $FlowFixMe
 type ComponentDataMap = WeakMap<BoundComponent, ComponentData>
+type ClassInstance = { context: Model, constructor: any }
 */
 
 const componentDataMap /*: ComponentDataMap */ = new WeakMap();
@@ -42,10 +43,17 @@ function bindComponentData (
   componentDataMap.set(Component, { modelFactory, ComponentContext });
 }
 
-function getComponentData (Component /*: BoundComponent */) /*: ComponentData */ {
+function getComponentData (
+  Component /*: BoundComponent */,
+) /*: ComponentData */ {
   const componentData = componentDataMap.get(Component);
 
-  invariant(componentData, `You need to bind a model to your component "${getDisplayName(Component)}" using bindModel`);
+  invariant(
+    componentData,
+    `You need to bind a model to your component "${getDisplayName(
+      Component,
+    )}" using bindModel`,
+  );
 
   return componentData;
 }
@@ -59,14 +67,23 @@ function providerFactory (
     const model = modelFactory(optionsFromProp || options);
 
     if (typeof modelRef === 'function') {
-      invariant(!modelRefSet.has(modelRef), `You cannot pass single ref to multiple "${getDisplayName(Provider)}" providers`);
+      invariant(
+        !modelRefSet.has(modelRef),
+        `You cannot pass single ref to multiple "${getDisplayName(
+          Provider,
+        )}" providers`,
+      );
 
       modelRef(model);
 
       modelRefSet.add(modelRef);
     }
 
-    return React.createElement(ComponentContext.Provider, { value: model }, children);
+    return React.createElement(
+      ComponentContext.Provider,
+      { value: model },
+      children,
+    );
   };
 
   Provider.propTypes = {
@@ -86,32 +103,52 @@ function providerFactory (
 function bindModel (
   Component /*: ComponentType */,
   modelFactory /*: ModelFactory */,
+  ComponentContext /*: ComponentContext */ = React.createContext(),
+  options /*: ?ModelOptions */,
 ) /*: void */ {
   invariant(
-    typeof Component === 'function' && typeof modelFactory === 'function',
+    typeof Component === 'function'
+    && typeof modelFactory === 'function'
+    && ComponentContext
+    && ComponentContext.Provider
+    && ComponentContext.Consumer,
     'bindModel expects a component and a model factory (and optionally a context)',
   );
 
-  const ComponentContext = React.createContext();
-
   bindComponentData(Component, modelFactory, ComponentContext);
 
-  // eslint-disable-next-line no-param-reassign
+  /* eslint-disable no-param-reassign */
+  Component.contextType = ComponentContext;
   Component.Consumer = ComponentContext.Consumer;
-  // eslint-disable-next-line no-param-reassign
-  Component.Provider = providerFactory(ComponentContext, modelFactory);
+  Component.Provider = providerFactory(ComponentContext, modelFactory, options);
+  /* eslint-enable no-param-reassign */
 }
 
 function useModel (Component /*: BoundComponent */) /*: Model */ {
   invariant(typeof Component === 'function', 'useModel expects a component');
 
   const { ComponentContext, modelFactory } = useMemo(
-    () => getComponentData(Component), [],
+    () => getComponentData(Component),
+    [],
   );
 
   const defaultModel = useMemo(modelFactory, []);
 
   return useContext(ComponentContext) || defaultModel;
+}
+
+function getModel (self /*: ClassInstance */) /*: Model */ {
+  invariant(
+    self
+    && self.constructor
+    && self.constructor.prototype
+    && self.constructor.prototype.render,
+    'getModel expects a class component instance (this keyword)',
+  );
+
+  return self.context && Object.keys(self.context).length > 0
+    ? self.context
+    : getComponentData(self.constructor).modelFactory();
 }
 
 function createCustomComponent (
@@ -127,8 +164,6 @@ function createCustomComponent (
   const CustomContext = React.createContext();
 
   class CustomComponent extends React.Component /*:: <{}> */ {
-    static contextType = CustomContext;
-
     static Provider;
 
     static Consumer;
@@ -142,15 +177,7 @@ function createCustomComponent (
     }
   }
 
-  bindComponentData(CustomComponent, modelFactory, CustomContext);
-
-  CustomComponent.Provider = providerFactory(
-    CustomContext,
-    modelFactory,
-    options,
-  );
-
-  CustomComponent.Consumer = CustomContext.Consumer;
+  bindModel(CustomComponent, modelFactory, CustomContext, options);
 
   return CustomComponent;
 }
@@ -158,5 +185,6 @@ function createCustomComponent (
 module.exports = {
   bindModel,
   useModel,
+  getModel,
   createCustomComponent,
 };
