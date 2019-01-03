@@ -105,7 +105,7 @@ function bindModel (
   modelFactory /*: ModelFactory */,
   ComponentContext /*: ComponentContext */ = React.createContext(),
   options /*: ?ModelOptions */,
-) /*: void */ {
+) /*: ComponentContext */ {
   invariant(
     typeof Component === 'function'
     && typeof modelFactory === 'function'
@@ -122,6 +122,8 @@ function bindModel (
   Component.Consumer = ComponentContext.Consumer;
   Component.Provider = providerFactory(ComponentContext, modelFactory, options);
   /* eslint-enable no-param-reassign */
+
+  return ComponentContext;
 }
 
 function useModel (Component /*: BoundComponent */) /*: Model */ {
