@@ -118,7 +118,9 @@ function bindModel (
   bindComponentData(Component, modelFactory, ComponentContext);
 
   /* eslint-disable no-param-reassign */
-  Component.contextType = ComponentContext;
+  if (Component.prototype.render) {
+    Component.contextType = ComponentContext;
+  }
   Component.Consumer = ComponentContext.Consumer;
   Component.Provider = providerFactory(ComponentContext, modelFactory, options);
   /* eslint-enable no-param-reassign */
