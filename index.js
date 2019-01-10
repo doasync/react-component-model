@@ -23,7 +23,7 @@ type ComponentProvider = React.ComponentType<{
   options?: ModelOptions
 }>
 type BoundComponent = ComponentType
-// $FlowFixMe
+// $FlowFixMe: WeakMap currently supports only objects as keys (not functions)
 type ComponentDataMap = WeakMap<BoundComponent, ComponentData>
 type ClassInstance = { context: Model, constructor: any }
 */
@@ -59,9 +59,9 @@ function getComponentData (
   return componentData;
 }
 
-function providerFactory (
-  ComponentContext /*: ComponentContext */,
+function createProvider (
   modelFactory /*: ModelFactory */,
+  ComponentContext /*: ComponentContext */,
   options /*: ?ModelOptions */,
 ) /*: ComponentProvider */ {
   const Provider = ({ children, modelRef, options: optionsFromProp }) => {
@@ -106,7 +106,7 @@ function bindModel (
   modelFactory /*: ModelFactory */,
   ComponentContext /*: ComponentContext */ = React.createContext(),
   options /*: ?ModelOptions */,
-) /*: ComponentContext */ {
+) /*: void */ {
   invariant(
     typeof Component === 'function'
     && typeof modelFactory === 'function'
@@ -123,11 +123,9 @@ function bindModel (
     Component.contextType = ComponentContext;
   }
   Component.Consumer = ComponentContext.Consumer;
-  Component.Provider = providerFactory(ComponentContext, modelFactory, options);
+  Component.Provider = createProvider(modelFactory, ComponentContext, options);
   Component.Provider.displayName = `${getDisplayName(Component)}.Provider`;
   /* eslint-enable no-param-reassign */
-
-  return ComponentContext;
 }
 
 function useModel (Component /*: BoundComponent */) /*: Model */ {
