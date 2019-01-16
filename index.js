@@ -1,5 +1,5 @@
 // @flow
-/* eslint-disable lines-between-class-members, react/sort-comp */
+/* eslint-disable react/sort-comp, lines-between-class-members */
 
 const React = require('react');
 const PropTypes = require('prop-types');
@@ -25,11 +25,9 @@ type ComponentProviderProps = {
   fallback?: React.Node
 }
 type ComponentProvider = React.ComponentType<ComponentProviderProps>
-
-type BoundComponent = ComponentType
+type ModelComponent = ComponentType
 // $FlowFixMe: WeakMap currently supports only objects as keys (not functions)
-type ComponentDataMap = WeakMap<BoundComponent, ComponentData>
-type ClassInstance = { context: Model, constructor: ComponentType }
+type ComponentDataMap = WeakMap<ModelComponent, ComponentData>
 */
 
 const componentDataMap /*: ComponentDataMap */ = new WeakMap();
@@ -48,7 +46,7 @@ function bindComponentData (
 }
 
 function getComponentData (
-  Component /*: BoundComponent */,
+  Component /*: ModelComponent */,
 ) /*: ComponentData */ {
   const componentData = componentDataMap.get(Component);
   const componentName = getDisplayName(Component);
@@ -56,24 +54,25 @@ function getComponentData (
   // For errors in a component
   warning(
     componentData,
-    `Your component "${componentName}" is not bound to a model`,
+    `"${componentName}" component is not connected to a model`,
   );
 
   invariant(
     componentData,
-    `You need to bind a model to your component "${componentName}" using bindModel`,
+    `You need to connect a model to "${componentName}" component (using connectModel)`,
   );
 
   return componentData;
 }
 
-function createProvider (
+function providerFactory (
   modelFactory /*: ModelFactory */,
   ComponentContext /*: ComponentContext */,
   options /*: ?ModelOptions */,
 ) /*: ComponentProvider */ {
   const modelRefSet = new WeakSet();
 
+  // TODO: Refactor to function component
   class Provider extends React.PureComponent /*:: <ComponentProviderProps> */ {
     static propTypes = {
       modelRef: PropTypes.func,
@@ -140,7 +139,7 @@ function createProvider (
   return Provider;
 }
 
-function bindModel (
+function connectModel (
   Component /*: ComponentType */,
   modelFactory /*: ModelFactory */,
   options /*: ?ModelOptions */,
@@ -149,15 +148,13 @@ function bindModel (
 
   invariant(
     typeof Component === 'function' && typeof modelFactory === 'function',
-    'bindModel expects a component and a model factory',
+    'connectModel expects a component and a model factory',
   );
 
-  if (Component.prototype.render) {
-    invariant(
-      Component.contextType,
-      `"${componentName}" class component must have contextType`,
-    );
-  }
+  invariant(
+    !Component.prototype.render,
+    `You cannot connect class components: "${componentName}"`,
+  );
 
   const ComponentContext = Component.contextType !== undefined
     ? Component.contextType
@@ -171,13 +168,13 @@ function bindModel (
   bindComponentData(Component, modelFactory, ComponentContext);
 
   /* eslint-disable no-param-reassign */
-  Component.Provider = createProvider(modelFactory, ComponentContext, options);
+  Component.Provider = providerFactory(modelFactory, ComponentContext, options);
   Component.Provider.displayName = `${componentName}.Provider`;
   Component.Consumer = ComponentContext.Consumer;
   /* eslint-enable no-param-reassign */
 }
 
-function useModel (Component /*: BoundComponent */) /*: Model */ {
+function useModel (Component /*: ModelComponent */) /*: Model */ {
   invariant(typeof Component === 'function', 'useModel expects a component');
 
   const { ComponentContext, modelFactory } = useMemo(
@@ -190,41 +187,10 @@ function useModel (Component /*: BoundComponent */) /*: Model */ {
   return useContext(ComponentContext) || defaultModel;
 }
 
-const classModelMap = new WeakMap();
-
-function getModel (self /*: ClassInstance */) /*: Model */ {
-  const model = classModelMap.get(self);
-
-  if (model === undefined) {
-    invariant(
-      self
-      && self.constructor
-      // $FlowFixMe: prototype
-      && self.constructor.prototype.render,
-      'getModel expects a class component instance (this keyword)',
-    );
-
-    // Also checks if component is bound to a model
-    const { modelFactory } = getComponentData(self.constructor);
-
-    if (self.context !== undefined) {
-      classModelMap.set(self, self.context);
-      return self.context;
-    }
-
-    const newModel = modelFactory();
-    classModelMap.set(self, newModel);
-
-    return newModel;
-  }
-
-  return model;
-}
-
 function createCustomComponent (
-  Component /*: BoundComponent */,
+  Component /*: ModelComponent */,
   options /*: ?ModelOptions */,
-) /*: BoundComponent */ {
+) /*: ModelComponent */ {
   invariant(
     typeof Component === 'function',
     'createCustomComponent expects a base component',
@@ -233,31 +199,27 @@ function createCustomComponent (
   const { ComponentContext, modelFactory } = getComponentData(Component);
   const CustomContext = React.createContext();
 
-  // eslint-disable-next-line react/no-multi-comp
-  class CustomComponent extends React.Component /*:: <{}> */ {
-    static contextType = CustomContext;
-    static Provider;
-    static Consumer;
+  const CustomComponent = (props) => {
+    const model = useContext(CustomContext);
 
-    render () {
-      return (
-        <ComponentContext.Provider value={this.context}>
-          <Component {...this.props} />
-        </ComponentContext.Provider>
-      );
-    }
-  }
+    return (
+      <ComponentContext.Provider value={model}>
+        <Component {...props} />
+      </ComponentContext.Provider>
+    );
+  };
 
+  CustomComponent.contextType = CustomContext;
   CustomComponent.displayName = `Custom$${getDisplayName(Component)}`;
 
-  bindModel(CustomComponent, modelFactory, options);
+  connectModel(CustomComponent, modelFactory, options);
 
   return CustomComponent;
 }
 
 module.exports = {
-  bindModel,
+  connectModel,
   useModel,
-  getModel,
+  getComponentData,
   createCustomComponent,
 };

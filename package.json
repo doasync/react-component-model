@@ -1,6 +1,6 @@
 {
   "name": "react-component-model",
-  "version": "3.0.0",
+  "version": "4.0.0-beta.0",
   "description": "Component model pattern",
   "main": "index.js",
   "repository": {
@@ -28,8 +28,8 @@
   "dependencies": {
     "invariant": "^2.2.4",
     "prop-types": "^15.6.2",
-    "react": "16.8.0-alpha.0",
-    "react-dom": "16.8.0-alpha.0",
+    "react": "16.8.0-alpha.1",
+    "react-dom": "16.8.0-alpha.1",
     "warning": "^4.0.2"
   },
   "devDependencies": {
