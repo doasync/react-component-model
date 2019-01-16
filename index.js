@@ -1,4 +1,5 @@
 // @flow
+/* eslint-disable lines-between-class-members, react/sort-comp */
 
 const React = require('react');
 const PropTypes = require('prop-types');
@@ -16,20 +17,22 @@ type ComponentData = {
   ComponentContext: ComponentContext,
   modelFactory: ModelFactory
 }
-type ComponentType = React.ComponentType<{}>
-type ComponentProvider = React.ComponentType<{
+type ComponentType = React.ComponentType<any>
+type ComponentProviderProps = {
   children: React.Node,
   modelRef?: (Model) => void,
-  options?: ModelOptions
-}>
+  options?: ModelOptions,
+  fallback?: React.Node
+}
+type ComponentProvider = React.ComponentType<ComponentProviderProps>
+
 type BoundComponent = ComponentType
 // $FlowFixMe: WeakMap currently supports only objects as keys (not functions)
 type ComponentDataMap = WeakMap<BoundComponent, ComponentData>
-type ClassInstance = { context: Model, constructor: any }
+type ClassInstance = { context: Model, constructor: ComponentType }
 */
 
 const componentDataMap /*: ComponentDataMap */ = new WeakMap();
-const modelRefSet = new WeakSet();
 
 function getDisplayName (Component /*: ComponentType */) /*: string */ {
   // flowlint-next-line sketchy-null-string: off
@@ -48,12 +51,17 @@ function getComponentData (
   Component /*: BoundComponent */,
 ) /*: ComponentData */ {
   const componentData = componentDataMap.get(Component);
+  const componentName = getDisplayName(Component);
+
+  // For errors in a component
+  warning(
+    componentData,
+    `Your component "${componentName}" is not bound to a model`,
+  );
 
   invariant(
     componentData,
-    `You need to bind a model to your component "${getDisplayName(
-      Component,
-    )}" using bindModel`,
+    `You need to bind a model to your component "${componentName}" using bindModel`,
   );
 
   return componentData;
@@ -64,39 +72,70 @@ function createProvider (
   ComponentContext /*: ComponentContext */,
   options /*: ?ModelOptions */,
 ) /*: ComponentProvider */ {
-  const Provider = ({ children, modelRef, options: optionsFromProp }) => {
-    const model = modelFactory(optionsFromProp || options);
+  const modelRefSet = new WeakSet();
 
-    if (typeof modelRef === 'function') {
-      warning(
-        !modelRefSet.has(modelRef),
-        `You should not pass single modelRef function to multiple providers (${getDisplayName(
-          Provider,
-        )})`,
-      );
+  class Provider extends React.PureComponent /*:: <ComponentProviderProps> */ {
+    static propTypes = {
+      modelRef: PropTypes.func,
+      options: PropTypes.objectOf(PropTypes.any),
+      children: PropTypes.node.isRequired,
+      fallback: PropTypes.node,
+    };
 
-      modelRef(model);
-
-      modelRefSet.add(modelRef);
+    static defaultProps = {
+      modelRef: undefined,
+      options: undefined,
+      fallback: undefined,
     }
 
-    return React.createElement(
-      ComponentContext.Provider,
-      { value: model },
-      children,
-    );
-  };
+    model;
+    promise;
 
-  Provider.propTypes = {
-    modelRef: PropTypes.func,
-    options: PropTypes.objectOf(PropTypes.any),
-    children: PropTypes.node.isRequired,
-  };
+    constructor (props) {
+      super(props);
 
-  Provider.defaultProps = {
-    modelRef: undefined,
-    options: undefined,
-  };
+      const providerName = getDisplayName(Provider);
+      const { modelRef, options: optionsFromProps } = props;
+
+      this.model = modelFactory(optionsFromProps || options);
+
+      if (typeof modelRef === 'function') {
+        warning(
+          !modelRefSet.has(modelRef),
+          `You should not pass single modelRef function to multiple providers (${providerName})`,
+        );
+
+        const refResult = modelRef(this.model);
+
+        if (refResult && refResult.then === 'function') {
+          this.promise = refResult;
+        }
+
+        modelRefSet.add(modelRef);
+      }
+    }
+
+    componentDidMount () {
+      if (this.promise) {
+        // eslint-disable-next-line promise/catch-or-return
+        this.promise.then(() => this.forceUpdate());
+      }
+    }
+
+    render () {
+      const { children, fallback = null } = this.props;
+
+      if (this.promise) {
+        return fallback;
+      }
+
+      return React.createElement(
+        ComponentContext.Provider,
+        { value: this.model },
+        children,
+      );
+    }
+  }
 
   return Provider;
 }
@@ -104,27 +143,37 @@ function createProvider (
 function bindModel (
   Component /*: ComponentType */,
   modelFactory /*: ModelFactory */,
-  ComponentContext /*: ComponentContext */ = React.createContext(),
   options /*: ?ModelOptions */,
 ) /*: void */ {
+  const componentName = getDisplayName(Component);
+
   invariant(
-    typeof Component === 'function'
-    && typeof modelFactory === 'function'
-    && ComponentContext
-    && ComponentContext.Provider
-    && ComponentContext.Consumer,
-    'bindModel expects a component and a model factory (and optionally a context)',
+    typeof Component === 'function' && typeof modelFactory === 'function',
+    'bindModel expects a component and a model factory',
+  );
+
+  if (Component.prototype.render) {
+    invariant(
+      Component.contextType,
+      `"${componentName}" class component must have contextType`,
+    );
+  }
+
+  const ComponentContext = Component.contextType !== undefined
+    ? Component.contextType
+    : React.createContext();
+
+  invariant(
+    ComponentContext && ComponentContext.Provider && ComponentContext.Consumer,
+    `Invalid context is provided to "${componentName}" component`,
   );
 
   bindComponentData(Component, modelFactory, ComponentContext);
 
   /* eslint-disable no-param-reassign */
-  if (Component.prototype.render) {
-    Component.contextType = ComponentContext;
-  }
-  Component.Consumer = ComponentContext.Consumer;
   Component.Provider = createProvider(modelFactory, ComponentContext, options);
-  Component.Provider.displayName = `${getDisplayName(Component)}.Provider`;
+  Component.Provider.displayName = `${componentName}.Provider`;
+  Component.Consumer = ComponentContext.Consumer;
   /* eslint-enable no-param-reassign */
 }
 
@@ -141,18 +190,35 @@ function useModel (Component /*: BoundComponent */) /*: Model */ {
   return useContext(ComponentContext) || defaultModel;
 }
 
-function getModel (self /*: ClassInstance */) /*: Model */ {
-  invariant(
-    self
-    && self.constructor
-    && self.constructor.prototype
-    && self.constructor.prototype.render,
-    'getModel expects a class component instance (this keyword)',
-  );
+const classModelMap = new WeakMap();
 
-  return self.context && Object.keys(self.context).length > 0
-    ? self.context
-    : getComponentData(self.constructor).modelFactory();
+function getModel (self /*: ClassInstance */) /*: Model */ {
+  const model = classModelMap.get(self);
+
+  if (model === undefined) {
+    invariant(
+      self
+      && self.constructor
+      // $FlowFixMe: prototype
+      && self.constructor.prototype.render,
+      'getModel expects a class component instance (this keyword)',
+    );
+
+    // Also checks if component is bound to a model
+    const { modelFactory } = getComponentData(self.constructor);
+
+    if (self.context !== undefined) {
+      classModelMap.set(self, self.context);
+      return self.context;
+    }
+
+    const newModel = modelFactory();
+    classModelMap.set(self, newModel);
+
+    return newModel;
+  }
+
+  return model;
 }
 
 function createCustomComponent (
@@ -167,9 +233,10 @@ function createCustomComponent (
   const { ComponentContext, modelFactory } = getComponentData(Component);
   const CustomContext = React.createContext();
 
+  // eslint-disable-next-line react/no-multi-comp
   class CustomComponent extends React.Component /*:: <{}> */ {
+    static contextType = CustomContext;
     static Provider;
-
     static Consumer;
 
     render () {
@@ -183,7 +250,7 @@ function createCustomComponent (
 
   CustomComponent.displayName = `Custom$${getDisplayName(Component)}`;
 
-  bindModel(CustomComponent, modelFactory, CustomContext, options);
+  bindModel(CustomComponent, modelFactory, options);
 
   return CustomComponent;
 }
