@@ -10,8 +10,8 @@ const { useContext, useMemo } = React;
 
 /*::
 type Model = {}
-type ModelOptions = {}
-type ModelFactory = (options: ?ModelOptions) => Model
+type ModelConfig = {}
+type ModelFactory = (config: ?ModelConfig) => Model
 type ComponentContext = React.Context<?Model>
 type ComponentData = {
   ComponentContext: ComponentContext,
@@ -21,8 +21,12 @@ type ComponentType = React.ComponentType<any>
 type ComponentProviderProps = {
   children: React.Node,
   modelRef?: (Model) => void,
-  options?: ModelOptions,
+  config?: ModelConfig,
   fallback?: React.Node
+}
+type ConnectModelOptions = {
+  context?: ComponentContext,
+  config?: ?ModelConfig
 }
 type ComponentProvider = React.ComponentType<ComponentProviderProps>
 type ModelComponent = ComponentType
@@ -68,7 +72,7 @@ function getComponentData (
 function providerFactory (
   modelFactory /*: ModelFactory */,
   ComponentContext /*: ComponentContext */,
-  options /*: ?ModelOptions */,
+  config /*: ?ModelConfig */,
 ) /*: ComponentProvider */ {
   const modelRefSet = new WeakSet();
 
@@ -76,16 +80,16 @@ function providerFactory (
   class Provider extends React.PureComponent /*:: <ComponentProviderProps> */ {
     static propTypes = {
       modelRef: PropTypes.func,
-      options: PropTypes.objectOf(PropTypes.any),
+      config: PropTypes.objectOf(PropTypes.any),
       children: PropTypes.node.isRequired,
       fallback: PropTypes.node,
     };
 
     static defaultProps = {
       modelRef: undefined,
-      options: undefined,
+      config: undefined,
       fallback: undefined,
-    }
+    };
 
     model;
     promise;
@@ -94,9 +98,9 @@ function providerFactory (
       super(props);
 
       const providerName = getDisplayName(Provider);
-      const { modelRef, options: optionsFromProps } = props;
+      const { modelRef, config: configFromProps } = props;
 
-      this.model = modelFactory(optionsFromProps || options);
+      this.model = modelFactory(configFromProps || config);
 
       if (typeof modelRef === 'function') {
         warning(
@@ -142,9 +146,10 @@ function providerFactory (
 function connectModel (
   Component /*: ComponentType */,
   modelFactory /*: ModelFactory */,
-  options /*: ?ModelOptions */,
+  options /*: ConnectModelOptions */ = {},
 ) /*: void */ {
   const componentName = getDisplayName(Component);
+  const { context, config } = options;
 
   invariant(
     typeof Component === 'function' && typeof modelFactory === 'function',
@@ -156,19 +161,17 @@ function connectModel (
     `You cannot connect class components: "${componentName}"`,
   );
 
-  const ComponentContext = Component.contextType !== undefined
-    ? Component.contextType
-    : React.createContext();
+  const ComponentContext = context !== undefined ? context : React.createContext();
 
   invariant(
     ComponentContext && ComponentContext.Provider && ComponentContext.Consumer,
-    `Invalid context is provided to "${componentName}" component`,
+    `Invalid context is provided to connectModel for "${componentName}" component`,
   );
 
   bindComponentData(Component, modelFactory, ComponentContext);
 
   /* eslint-disable no-param-reassign */
-  Component.Provider = providerFactory(modelFactory, ComponentContext, options);
+  Component.Provider = providerFactory(modelFactory, ComponentContext, config);
   Component.Provider.displayName = `${componentName}.Provider`;
   Component.Consumer = ComponentContext.Consumer;
   /* eslint-enable no-param-reassign */
@@ -189,7 +192,7 @@ function useModel (Component /*: ModelComponent */) /*: Model */ {
 
 function createCustomComponent (
   Component /*: ModelComponent */,
-  options /*: ?ModelOptions */,
+  config /*: ?ModelConfig */,
 ) /*: ModelComponent */ {
   invariant(
     typeof Component === 'function',
@@ -209,10 +212,12 @@ function createCustomComponent (
     );
   };
 
-  CustomComponent.contextType = CustomContext;
   CustomComponent.displayName = `Custom$${getDisplayName(Component)}`;
 
-  connectModel(CustomComponent, modelFactory, options);
+  connectModel(CustomComponent, modelFactory, {
+    context: CustomContext,
+    config,
+  });
 
   return CustomComponent;
 }
