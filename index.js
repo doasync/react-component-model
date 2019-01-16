@@ -24,7 +24,7 @@ type ComponentProviderProps = {
   config?: ModelConfig,
   fallback?: React.Node
 }
-type ConnectModelOptions = {
+type ConnectOptions = {
   context?: ComponentContext,
   config?: ?ModelConfig
 }
@@ -146,7 +146,7 @@ function providerFactory (
 function connectModel (
   Component /*: ComponentType */,
   modelFactory /*: ModelFactory */,
-  options /*: ConnectModelOptions */ = {},
+  options /*: ConnectOptions */ = {},
 ) /*: void */ {
   const componentName = getDisplayName(Component);
   const { context, config } = options;
@@ -192,7 +192,6 @@ function useModel (Component /*: ModelComponent */) /*: Model */ {
 
 function createCustomComponent (
   Component /*: ModelComponent */,
-  config /*: ?ModelConfig */,
 ) /*: ModelComponent */ {
   invariant(
     typeof Component === 'function',
@@ -216,7 +215,6 @@ function createCustomComponent (
 
   connectModel(CustomComponent, modelFactory, {
     context: CustomContext,
-    config,
   });
 
   return CustomComponent;
