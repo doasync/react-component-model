@@ -76,69 +76,46 @@ function providerFactory (
 ) /*: ComponentProvider */ {
   const modelRefSet = new WeakSet();
 
-  // TODO: Refactor to function component
-  class Provider extends React.PureComponent /*:: <ComponentProviderProps> */ {
-    static propTypes = {
-      modelRef: PropTypes.func,
-      config: PropTypes.objectOf(PropTypes.any),
-      children: PropTypes.node.isRequired,
-      fallback: PropTypes.node,
-    };
+  const Provider = React.memo((props /*: ComponentProviderProps */) => {
+    const { modelRef, config: configFromProps } = props;
 
-    static defaultProps = {
-      modelRef: undefined,
-      config: undefined,
-      fallback: undefined,
-    };
+    const model = useMemo(() => modelFactory(configFromProps || config), []);
 
-    model;
-    promise;
-
-    constructor (props) {
-      super(props);
-
-      const providerName = getDisplayName(Provider);
-      const { modelRef, config: configFromProps } = props;
-
-      this.model = modelFactory(configFromProps || config);
-
+    useMemo(() => {
       if (typeof modelRef === 'function') {
+        const providerName = getDisplayName(Provider);
+
         warning(
           !modelRefSet.has(modelRef),
           `You should not pass single modelRef function to multiple providers (${providerName})`,
         );
 
-        const refResult = modelRef(this.model);
-
-        if (refResult && refResult.then === 'function') {
-          this.promise = refResult;
-        }
-
         modelRefSet.add(modelRef);
+
+        modelRef(model);
       }
-    }
+    }, []);
 
-    componentDidMount () {
-      if (this.promise) {
-        // eslint-disable-next-line promise/catch-or-return
-        this.promise.then(() => this.forceUpdate());
-      }
-    }
+    const { children } = props;
 
-    render () {
-      const { children, fallback = null } = this.props;
+    return React.createElement(
+      ComponentContext.Provider,
+      { value: model },
+      children,
+    );
+  });
 
-      if (this.promise) {
-        return fallback;
-      }
+  Provider.propTypes = {
+    modelRef: PropTypes.func,
+    config: PropTypes.objectOf(PropTypes.any),
+    children: PropTypes.node.isRequired,
+  };
 
-      return React.createElement(
-        ComponentContext.Provider,
-        { value: this.model },
-        children,
-      );
-    }
-  }
+  // $FlowFixMe: defaultProps
+  Provider.defaultProps = {
+    modelRef: undefined,
+    config: undefined,
+  };
 
   return Provider;
 }
@@ -192,6 +169,7 @@ function useModel (Component /*: ModelComponent */) /*: Model */ {
 
 function createCustomComponent (
   Component /*: ModelComponent */,
+  config /*: ModelConfig */,
 ) /*: ModelComponent */ {
   invariant(
     typeof Component === 'function',
@@ -215,6 +193,7 @@ function createCustomComponent (
 
   connectModel(CustomComponent, modelFactory, {
     context: CustomContext,
+    config,
   });
 
   return CustomComponent;
