@@ -1,4 +1,4 @@
-// @flow
+// @flow strict
 /* eslint-disable react/sort-comp, lines-between-class-members */
 
 const React = require('react');
@@ -12,9 +12,9 @@ const { useContext, useMemo } = React;
 type Model = {}
 type ModelConfig = {}
 type ModelFactory = (config: ?ModelConfig) => Model
-type ComponentContext = React.Context<?Model>
+type ComponentContextType = React.Context<?Model>
 type ComponentData = {
-  ComponentContext: ComponentContext,
+  ComponentContext: ComponentContextType,
   modelFactory: ModelFactory
 }
 type ComponentType = React.ComponentType<any>
@@ -25,7 +25,7 @@ type ComponentProviderProps = {
   fallback?: React.Node
 }
 type ConnectOptions = {
-  context?: ComponentContext,
+  context?: ComponentContextType,
   config?: ?ModelConfig
 }
 type ComponentProvider = React.ComponentType<ComponentProviderProps>
@@ -44,7 +44,7 @@ function getDisplayName (Component /*: ComponentType */) /*: string */ {
 function bindComponentData (
   Component /*: ComponentType */,
   modelFactory /*: ModelFactory */,
-  ComponentContext /*: ComponentContext */,
+  ComponentContext /*: ComponentContextType */,
 ) /*: void */ {
   componentDataMap.set(Component, { modelFactory, ComponentContext });
 }
@@ -71,7 +71,7 @@ function getComponentData (
 
 function providerFactory (
   modelFactory /*: ModelFactory */,
-  ComponentContext /*: ComponentContext */,
+  ComponentContext /*: ComponentContextType */,
   config /*: ?ModelConfig */,
 ) /*: ComponentProvider */ {
   const modelRefSet = new WeakSet();
@@ -182,10 +182,13 @@ function createCustomComponent (
   const CustomComponent = (props) => {
     const model = useContext(CustomContext);
 
-    return (
-      <ComponentContext.Provider value={model}>
-        <Component {...props} />
-      </ComponentContext.Provider>
+    return React.createElement(
+      ComponentContext.Provider,
+      {value: model},
+      React.createElement(
+        Component,
+        {...props}
+      )
     );
   };
 
